@@ -1,1 +1,6 @@
 skill.md
+games/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store

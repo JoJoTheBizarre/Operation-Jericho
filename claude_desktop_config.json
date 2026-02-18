@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "jericho": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/absolute/path/to/Operation-Jericho",
+        "run",
+        "jericho-mcp-server"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
+
+/*
+Alternative configuration using python directly:
+
+{
+  "mcpServers": {
+    "jericho": {
+      "command": "python",
+      "args": [
+        "/absolute/path/to/Operation-Jericho/jericho_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
+
+Replace /absolute/path/to/Operation-Jericho with the actual absolute path to this directory.
+*/
