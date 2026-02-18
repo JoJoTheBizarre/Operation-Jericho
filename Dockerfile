@@ -41,8 +41,8 @@ RUN uv pip install --system -e .
 
 # Clone game files from GitHub
 RUN git clone https://github.com/BYU-PCCL/z-machine-games.git /tmp/z-machine-games && \
-    mkdir -p /app/games && \
-    cp -r /tmp/z-machine-games/jericho-game-suite /app/games/ && \
+    mkdir -p /app/games/z-machine-games && \
+    cp -r /tmp/z-machine-games/jericho-game-suite /app/games/z-machine-games/ && \
     rm -rf /tmp/z-machine-games
 
 # Create non-root user for security
