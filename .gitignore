@@ -74,4 +74,3 @@ test_fastmcp.py
 
 # Claude Code configuration
 .claude/
-claude_desktop_config.json
