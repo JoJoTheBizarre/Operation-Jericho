@@ -1,0 +1,41 @@
+# Docker ignore file for Jericho MCP Server
+
+# Version control
+.git
+.gitignore
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+skill.md
+example_usage.py
+claude_desktop_config.json
+
+# Test files
+test_*.py
+
+# Local development files
+*.log
+*.tmp
