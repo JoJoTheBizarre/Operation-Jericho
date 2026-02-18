@@ -17,11 +17,17 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 # Import our jericho wrapper
-from src.zork_env import TextAdventureEnv, GameState, list_available_games, discover_games
+from src.zork_env import (
+    TextAdventureEnv,
+    GameState,
+    list_available_games,
+    discover_games,
+)
 
 
 # Initialize the MCP server
 server = Server("jericho-mcp-server")
+
 
 # Session management
 class GameSession:
@@ -62,7 +68,8 @@ def _get_session(session_id: str) -> Optional[GameSession]:
 def _cleanup_expired_sessions(timeout_minutes: int = 60):
     """Remove expired sessions."""
     expired_ids = [
-        session_id for session_id, session in _sessions.items()
+        session_id
+        for session_id, session in _sessions.items()
         if session.is_expired(timeout_minutes)
     ]
     for session_id in expired_ids:
@@ -86,10 +93,10 @@ async def list_tools() -> List[Tool]:
                     "limit": {
                         "type": "number",
                         "description": "Maximum number of games to return (0 for all)",
-                        "default": 0
+                        "default": 0,
                     }
-                }
-            }
+                },
+            },
         ),
         Tool(
             name="create_game_session",
@@ -99,11 +106,11 @@ async def list_tools() -> List[Tool]:
                 "properties": {
                     "game_name": {
                         "type": "string",
-                        "description": "Name of the game to start (e.g., 'zork1', 'advent')"
+                        "description": "Name of the game to start (e.g., 'zork1', 'advent')",
                     }
                 },
-                "required": ["game_name"]
-            }
+                "required": ["game_name"],
+            },
         ),
         Tool(
             name="game_step",
@@ -113,15 +120,15 @@ async def list_tools() -> List[Tool]:
                 "properties": {
                     "session_id": {
                         "type": "string",
-                        "description": "Session ID returned by create_game_session"
+                        "description": "Session ID returned by create_game_session",
                     },
                     "action": {
                         "type": "string",
-                        "description": "Action to perform (e.g., 'go north', 'take lamp', 'look')"
-                    }
+                        "description": "Action to perform (e.g., 'go north', 'take lamp', 'look')",
+                    },
                 },
-                "required": ["session_id", "action"]
-            }
+                "required": ["session_id", "action"],
+            },
         ),
         Tool(
             name="get_game_state",
@@ -131,11 +138,11 @@ async def list_tools() -> List[Tool]:
                 "properties": {
                     "session_id": {
                         "type": "string",
-                        "description": "Session ID returned by create_game_session"
+                        "description": "Session ID returned by create_game_session",
                     }
                 },
-                "required": ["session_id"]
-            }
+                "required": ["session_id"],
+            },
         ),
         Tool(
             name="get_valid_actions",
@@ -145,11 +152,11 @@ async def list_tools() -> List[Tool]:
                 "properties": {
                     "session_id": {
                         "type": "string",
-                        "description": "Session ID returned by create_game_session"
+                        "description": "Session ID returned by create_game_session",
                     }
                 },
-                "required": ["session_id"]
-            }
+                "required": ["session_id"],
+            },
         ),
         Tool(
             name="reset_game",
@@ -159,11 +166,11 @@ async def list_tools() -> List[Tool]:
                 "properties": {
                     "session_id": {
                         "type": "string",
-                        "description": "Session ID returned by create_game_session"
+                        "description": "Session ID returned by create_game_session",
                     }
                 },
-                "required": ["session_id"]
-            }
+                "required": ["session_id"],
+            },
         ),
         Tool(
             name="close_game_session",
@@ -173,11 +180,11 @@ async def list_tools() -> List[Tool]:
                 "properties": {
                     "session_id": {
                         "type": "string",
-                        "description": "Session ID returned by create_game_session"
+                        "description": "Session ID returned by create_game_session",
                     }
                 },
-                "required": ["session_id"]
-            }
+                "required": ["session_id"],
+            },
         ),
         Tool(
             name="save_game_state",
@@ -187,11 +194,11 @@ async def list_tools() -> List[Tool]:
                 "properties": {
                     "session_id": {
                         "type": "string",
-                        "description": "Session ID returned by create_game_session"
+                        "description": "Session ID returned by create_game_session",
                     }
                 },
-                "required": ["session_id"]
-            }
+                "required": ["session_id"],
+            },
         ),
         Tool(
             name="load_game_state",
@@ -201,15 +208,15 @@ async def list_tools() -> List[Tool]:
                 "properties": {
                     "session_id": {
                         "type": "string",
-                        "description": "Session ID returned by create_game_session"
+                        "description": "Session ID returned by create_game_session",
                     },
                     "state_data": {
                         "type": "string",
-                        "description": "Saved state data from save_game_state"
-                    }
+                        "description": "Saved state data from save_game_state",
+                    },
                 },
-                "required": ["session_id", "state_data"]
-            }
+                "required": ["session_id", "state_data"],
+            },
         ),
     ]
 
@@ -243,10 +250,7 @@ async def call_tool(name: str, arguments: Any) -> List[TextContent]:
     elif name == "load_game_state":
         return await handle_load_state(arguments)
     else:
-        return [TextContent(
-            type="text",
-            text=f"Unknown tool: {name}"
-        )]
+        return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
 
 async def handle_list_games(arguments: dict) -> List[TextContent]:
@@ -261,18 +265,22 @@ async def handle_list_games(arguments: dict) -> List[TextContent]:
         result = {
             "total_games": len(games),
             "games": games,
-            "default_games_dir": str(Path(__file__).parent / "games" / "z-machine-games" / "jericho-game-suite")
+            "default_games_dir": str(
+                Path(__file__).parent
+                / "games"
+                / "z-machine-games"
+                / "jericho-game-suite"
+            ),
         }
 
-        return [TextContent(
-            type="text",
-            text=json.dumps(result, indent=2)
-        )]
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
     except Exception as e:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Failed to list games: {str(e)}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": f"Failed to list games: {str(e)}"}, indent=2),
+            )
+        ]
 
 
 async def handle_create_session(arguments: dict) -> List[TextContent]:
@@ -280,10 +288,12 @@ async def handle_create_session(arguments: dict) -> List[TextContent]:
     game_name = arguments.get("game_name")
 
     if not game_name:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "game_name is required"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": "game_name is required"}, indent=2),
+            )
+        ]
 
     try:
         # Create game environment
@@ -300,18 +310,19 @@ async def handle_create_session(arguments: dict) -> List[TextContent]:
             "session_id": session_id,
             "game_name": game_name,
             "initial_state": _format_game_state(state),
-            "message": f"Started game '{game_name}'. Use session_id for future interactions."
+            "message": f"Started game '{game_name}'. Use session_id for future interactions.",
         }
 
-        return [TextContent(
-            type="text",
-            text=json.dumps(result, indent=2)
-        )]
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
     except Exception as e:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Failed to create game session: {str(e)}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Failed to create game session: {str(e)}"}, indent=2
+                ),
+            )
+        ]
 
 
 async def handle_game_step(arguments: dict) -> List[TextContent]:
@@ -320,17 +331,25 @@ async def handle_game_step(arguments: dict) -> List[TextContent]:
     action = arguments.get("action")
 
     if not session_id or not action:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "session_id and action are required"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": "session_id and action are required"}, indent=2
+                ),
+            )
+        ]
 
     session = _get_session(session_id)
     if not session:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Session not found: {session_id}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Session not found: {session_id}"}, indent=2
+                ),
+            )
+        ]
 
     try:
         # Take the action
@@ -341,18 +360,20 @@ async def handle_game_step(arguments: dict) -> List[TextContent]:
             "session_id": session_id,
             "action": action,
             "new_state": _format_game_state(state),
-            "action_result": state.observation
+            "action_result": state.observation,
         }
 
-        return [TextContent(
-            type="text",
-            text=json.dumps(result, indent=2)
-        )]
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
     except Exception as e:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Failed to execute action '{action}': {str(e)}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Failed to execute action '{action}': {str(e)}"},
+                    indent=2,
+                ),
+            )
+        ]
 
 
 async def handle_get_game_state(arguments: dict) -> List[TextContent]:
@@ -360,17 +381,23 @@ async def handle_get_game_state(arguments: dict) -> List[TextContent]:
     session_id = arguments.get("session_id")
 
     if not session_id:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "session_id is required"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": "session_id is required"}, indent=2),
+            )
+        ]
 
     session = _get_session(session_id)
     if not session:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Session not found: {session_id}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Session not found: {session_id}"}, indent=2
+                ),
+            )
+        ]
 
     # If we don't have a current state, get it
     if not session.current_state:
@@ -383,13 +410,12 @@ async def handle_get_game_state(arguments: dict) -> List[TextContent]:
     result = {
         "session_id": session_id,
         "game_name": session.game_name,
-        "state": _format_game_state(session.current_state) if session.current_state else None
+        "state": _format_game_state(session.current_state)
+        if session.current_state
+        else None,
     }
 
-    return [TextContent(
-        type="text",
-        text=json.dumps(result, indent=2)
-    )]
+    return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
 
 async def handle_get_valid_actions(arguments: dict) -> List[TextContent]:
@@ -397,17 +423,23 @@ async def handle_get_valid_actions(arguments: dict) -> List[TextContent]:
     session_id = arguments.get("session_id")
 
     if not session_id:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "session_id is required"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": "session_id is required"}, indent=2),
+            )
+        ]
 
     session = _get_session(session_id)
     if not session:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Session not found: {session_id}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Session not found: {session_id}"}, indent=2
+                ),
+            )
+        ]
 
     try:
         valid_actions = session.env.get_valid_actions()
@@ -415,18 +447,19 @@ async def handle_get_valid_actions(arguments: dict) -> List[TextContent]:
         result = {
             "session_id": session_id,
             "valid_actions": valid_actions,
-            "count": len(valid_actions)
+            "count": len(valid_actions),
         }
 
-        return [TextContent(
-            type="text",
-            text=json.dumps(result, indent=2)
-        )]
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
     except Exception as e:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Failed to get valid actions: {str(e)}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Failed to get valid actions: {str(e)}"}, indent=2
+                ),
+            )
+        ]
 
 
 async def handle_reset_game(arguments: dict) -> List[TextContent]:
@@ -434,17 +467,23 @@ async def handle_reset_game(arguments: dict) -> List[TextContent]:
     session_id = arguments.get("session_id")
 
     if not session_id:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "session_id is required"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": "session_id is required"}, indent=2),
+            )
+        ]
 
     session = _get_session(session_id)
     if not session:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Session not found: {session_id}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Session not found: {session_id}"}, indent=2
+                ),
+            )
+        ]
 
     try:
         state = session.env.reset()
@@ -454,18 +493,17 @@ async def handle_reset_game(arguments: dict) -> List[TextContent]:
             "session_id": session_id,
             "game_name": session.game_name,
             "reset_state": _format_game_state(state),
-            "message": "Game reset to beginning"
+            "message": "Game reset to beginning",
         }
 
-        return [TextContent(
-            type="text",
-            text=json.dumps(result, indent=2)
-        )]
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
     except Exception as e:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Failed to reset game: {str(e)}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": f"Failed to reset game: {str(e)}"}, indent=2),
+            )
+        ]
 
 
 async def handle_close_session(arguments: dict) -> List[TextContent]:
@@ -473,34 +511,33 @@ async def handle_close_session(arguments: dict) -> List[TextContent]:
     session_id = arguments.get("session_id")
 
     if not session_id:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "session_id is required"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": "session_id is required"}, indent=2),
+            )
+        ]
 
     if session_id in _sessions:
         # Clean up resources if needed
         session = _sessions[session_id]
-        if hasattr(session.env, 'close'):
+        if hasattr(session.env, "close"):
             session.env.close()
         del _sessions[session_id]
 
         result = {
             "session_id": session_id,
             "closed": True,
-            "message": "Game session closed"
+            "message": "Game session closed",
         }
     else:
         result = {
             "session_id": session_id,
             "closed": False,
-            "message": "Session not found (may have already been closed)"
+            "message": "Session not found (may have already been closed)",
         }
 
-    return [TextContent(
-        type="text",
-        text=json.dumps(result, indent=2)
-    )]
+    return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
 
 async def handle_save_state(arguments: dict) -> List[TextContent]:
@@ -508,38 +545,49 @@ async def handle_save_state(arguments: dict) -> List[TextContent]:
     session_id = arguments.get("session_id")
 
     if not session_id:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "session_id is required"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": "session_id is required"}, indent=2),
+            )
+        ]
 
     session = _get_session(session_id)
     if not session:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Session not found: {session_id}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Session not found: {session_id}"}, indent=2
+                ),
+            )
+        ]
 
     try:
         saved_state = session.env.save_state()
         # Convert to JSON-serializable format if needed
-        state_str = json.dumps(saved_state) if isinstance(saved_state, (dict, list)) else str(saved_state)
+        state_str = (
+            json.dumps(saved_state)
+            if isinstance(saved_state, (dict, list))
+            else str(saved_state)
+        )
 
         result = {
             "session_id": session_id,
             "state_data": state_str,
-            "message": "Game state saved"
+            "message": "Game state saved",
         }
 
-        return [TextContent(
-            type="text",
-            text=json.dumps(result, indent=2)
-        )]
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
     except Exception as e:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Failed to save game state: {str(e)}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Failed to save game state: {str(e)}"}, indent=2
+                ),
+            )
+        ]
 
 
 async def handle_load_state(arguments: dict) -> List[TextContent]:
@@ -548,17 +596,25 @@ async def handle_load_state(arguments: dict) -> List[TextContent]:
     state_data = arguments.get("state_data")
 
     if not session_id or not state_data:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "session_id and state_data are required"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": "session_id and state_data are required"}, indent=2
+                ),
+            )
+        ]
 
     session = _get_session(session_id)
     if not session:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Session not found: {session_id}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Session not found: {session_id}"}, indent=2
+                ),
+            )
+        ]
 
     try:
         # Parse state data
@@ -577,18 +633,19 @@ async def handle_load_state(arguments: dict) -> List[TextContent]:
         result = {
             "session_id": session_id,
             "loaded": True,
-            "message": "Game state loaded"
+            "message": "Game state loaded",
         }
 
-        return [TextContent(
-            type="text",
-            text=json.dumps(result, indent=2)
-        )]
+        return [TextContent(type="text", text=json.dumps(result, indent=2))]
     except Exception as e:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": f"Failed to load game state: {str(e)}"}, indent=2)
-        )]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {"error": f"Failed to load game state: {str(e)}"}, indent=2
+                ),
+            )
+        ]
 
 
 def _format_game_state(state: GameState) -> dict:
@@ -601,7 +658,7 @@ def _format_game_state(state: GameState) -> dict:
         "done": state.done,
         "reward": state.reward,
         "inventory": state.inventory,
-        "location": state.location
+        "location": state.location,
     }
 
 
@@ -609,9 +666,7 @@ async def main():
     """Main entry point to run the MCP server over stdio."""
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
-            read_stream,
-            write_stream,
-            server.create_initialization_options()
+            read_stream, write_stream, server.create_initialization_options()
         )
 
 

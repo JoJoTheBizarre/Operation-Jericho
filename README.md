@@ -14,12 +14,25 @@ MCP server for playing classic text adventure games (Zork, Adventure, etc.) via 
 - `load_game_state` - Load a previously saved game state
 - `close_game_session` - Close a game session and free resources
 
-## Docker
+## Docker (stdio)
 
 ```bash
 docker build -t jericho-mcp-server .
 docker run -it --rm jericho-mcp-server
 ```
+
+## HTTP Server
+
+For remote access, use the FastMCP HTTP server:
+
+```bash
+# Build with multi-stage optimization
+docker build -t jericho-fastmcp-server .
+# Run with port mapping
+docker run -p 8000:8000 --rm jericho-fastmcp-server
+```
+
+The server includes a health endpoint at `/health` and exposes MCP tools via HTTP.
 
 ## Games
 

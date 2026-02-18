@@ -12,12 +12,7 @@ import json
 def example_list_games():
     """Example list_available_games tool call."""
     print("Example: list_available_games")
-    tool_call = {
-        "name": "list_available_games",
-        "arguments": {
-            "limit": 5
-        }
-    }
+    tool_call = {"name": "list_available_games", "arguments": {"limit": 5}}
     print(json.dumps(tool_call, indent=2))
     print("\nExpected response: List of available games (first 5)")
     print("=" * 60)
@@ -26,12 +21,7 @@ def example_list_games():
 def example_create_session():
     """Example create_game_session tool call."""
     print("\nExample: create_game_session")
-    tool_call = {
-        "name": "create_game_session",
-        "arguments": {
-            "game_name": "zork1"
-        }
-    }
+    tool_call = {"name": "create_game_session", "arguments": {"game_name": "zork1"}}
     print(json.dumps(tool_call, indent=2))
     print("\nExpected response: Session ID and initial game state")
     print("=" * 60)
@@ -42,10 +32,7 @@ def example_game_step():
     print("\nExample: game_step")
     tool_call = {
         "name": "game_step",
-        "arguments": {
-            "session_id": "SESSION_ID_FROM_CREATE",
-            "action": "look"
-        }
+        "arguments": {"session_id": "SESSION_ID_FROM_CREATE", "action": "look"},
     }
     print(json.dumps(tool_call, indent=2))
     print("\nExpected response: New game state after looking around")
@@ -57,9 +44,7 @@ def example_get_state():
     print("\nExample: get_game_state")
     tool_call = {
         "name": "get_game_state",
-        "arguments": {
-            "session_id": "SESSION_ID_FROM_CREATE"
-        }
+        "arguments": {"session_id": "SESSION_ID_FROM_CREATE"},
     }
     print(json.dumps(tool_call, indent=2))
     print("\nExpected response: Current game state (score, location, inventory)")
@@ -71,9 +56,7 @@ def example_get_valid_actions():
     print("\nExample: get_valid_actions")
     tool_call = {
         "name": "get_valid_actions",
-        "arguments": {
-            "session_id": "SESSION_ID_FROM_CREATE"
-        }
+        "arguments": {"session_id": "SESSION_ID_FROM_CREATE"},
     }
     print(json.dumps(tool_call, indent=2))
     print("\nExpected response: List of valid actions for current state")
@@ -85,9 +68,7 @@ def example_reset_game():
     print("\nExample: reset_game")
     tool_call = {
         "name": "reset_game",
-        "arguments": {
-            "session_id": "SESSION_ID_FROM_CREATE"
-        }
+        "arguments": {"session_id": "SESSION_ID_FROM_CREATE"},
     }
     print(json.dumps(tool_call, indent=2))
     print("\nExpected response: Game reset to beginning with new state")
@@ -99,9 +80,7 @@ def example_close_session():
     print("\nExample: close_game_session")
     tool_call = {
         "name": "close_game_session",
-        "arguments": {
-            "session_id": "SESSION_ID_FROM_CREATE"
-        }
+        "arguments": {"session_id": "SESSION_ID_FROM_CREATE"},
     }
     print(json.dumps(tool_call, indent=2))
     print("\nExpected response: Confirmation that session was closed")

@@ -16,11 +16,17 @@ from fastmcp import FastMCP, Context
 from starlette.responses import JSONResponse
 
 # Import our jericho wrapper
-from src.zork_env import TextAdventureEnv, GameState, list_available_games, discover_games
+from src.zork_env import (
+    TextAdventureEnv,
+    GameState,
+    list_available_games,
+    discover_games,
+)
 
 
 # Initialize the FastMCP server
 mcp = FastMCP("jericho-fastmcp-server")
+
 
 # Session management (same as before)
 class GameSession:
@@ -61,7 +67,8 @@ def _get_session(session_id: str) -> Optional[GameSession]:
 def _cleanup_expired_sessions(timeout_minutes: int = 60):
     """Remove expired sessions."""
     expired_ids = [
-        session_id for session_id, session in _sessions.items()
+        session_id
+        for session_id, session in _sessions.items()
         if session.is_expired(timeout_minutes)
     ]
     for session_id in expired_ids:
@@ -79,7 +86,7 @@ def _format_game_state(state: GameState) -> dict:
         "done": state.done,
         "reward": state.reward,
         "inventory": state.inventory,
-        "location": state.location
+        "location": state.location,
     }
 
 
@@ -104,7 +111,12 @@ async def list_available_games_tool(limit: int = 0) -> dict:
         result = {
             "total_games": len(games),
             "games": games,
-            "default_games_dir": str(Path(__file__).parent / "games" / "z-machine-games" / "jericho-game-suite")
+            "default_games_dir": str(
+                Path(__file__).parent
+                / "games"
+                / "z-machine-games"
+                / "jericho-game-suite"
+            ),
         }
         return result
     except Exception as e:
@@ -137,7 +149,7 @@ async def create_game_session(game_name: str) -> dict:
             "session_id": session_id,
             "game_name": game_name,
             "initial_state": _format_game_state(state),
-            "message": f"Started game '{game_name}'. Use session_id for future interactions."
+            "message": f"Started game '{game_name}'. Use session_id for future interactions.",
         }
         return result
     except Exception as e:
@@ -169,7 +181,7 @@ async def game_step(session_id: str, action: str) -> dict:
             "session_id": session_id,
             "action": action,
             "new_state": _format_game_state(state),
-            "action_result": state.observation
+            "action_result": state.observation,
         }
         return result
     except Exception as e:
@@ -202,7 +214,9 @@ async def get_game_state(session_id: str) -> dict:
     result = {
         "session_id": session_id,
         "game_name": session.game_name,
-        "state": _format_game_state(session.current_state) if session.current_state else None
+        "state": _format_game_state(session.current_state)
+        if session.current_state
+        else None,
     }
     return result
 
@@ -228,7 +242,7 @@ async def get_valid_actions(session_id: str) -> dict:
         result = {
             "session_id": session_id,
             "valid_actions": valid_actions,
-            "count": len(valid_actions)
+            "count": len(valid_actions),
         }
         return result
     except Exception as e:
@@ -258,7 +272,7 @@ async def reset_game(session_id: str) -> dict:
             "session_id": session_id,
             "game_name": session.game_name,
             "reset_state": _format_game_state(state),
-            "message": "Game reset to beginning"
+            "message": "Game reset to beginning",
         }
         return result
     except Exception as e:
@@ -279,20 +293,20 @@ async def close_game_session(session_id: str) -> dict:
     if session_id in _sessions:
         # Clean up resources if needed
         session = _sessions[session_id]
-        if hasattr(session.env, 'close'):
+        if hasattr(session.env, "close"):
             session.env.close()
         del _sessions[session_id]
 
         result = {
             "session_id": session_id,
             "closed": True,
-            "message": "Game session closed"
+            "message": "Game session closed",
         }
     else:
         result = {
             "session_id": session_id,
             "closed": False,
-            "message": "Session not found (may have already been closed)"
+            "message": "Session not found (may have already been closed)",
         }
     return result
 
@@ -315,12 +329,16 @@ async def save_game_state(session_id: str) -> dict:
     try:
         saved_state = session.env.save_state()
         # Convert to JSON-serializable format if needed
-        state_str = json.dumps(saved_state) if isinstance(saved_state, (dict, list)) else str(saved_state)
+        state_str = (
+            json.dumps(saved_state)
+            if isinstance(saved_state, (dict, list))
+            else str(saved_state)
+        )
 
         result = {
             "session_id": session_id,
             "state_data": state_str,
-            "message": "Game state saved"
+            "message": "Game state saved",
         }
         return result
     except Exception as e:
@@ -360,7 +378,7 @@ async def load_game_state(session_id: str, state_data: str) -> dict:
         result = {
             "session_id": session_id,
             "loaded": True,
-            "message": "Game state loaded"
+            "message": "Game state loaded",
         }
         return result
     except Exception as e:
@@ -382,6 +400,7 @@ def main():
     """Run the HTTP server using uvicorn."""
     import uvicorn
     import os
+
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "8000"))
     print(f"Starting Jericho FastMCP HTTP server on {host}:{port}")
