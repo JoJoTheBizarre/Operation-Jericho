@@ -1,6 +1,77 @@
+# Documentation and external files
 skill.md
 games/
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
 .venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Build and distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Setuptools and packaging
+*.mo
+*.pot
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor and IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+~$
+
+# Docker
+docker-build*.log
+
+# Local test files
+test_container.py
+test_fastmcp.py
+
+# Claude Code configuration
+.claude/
+claude_desktop_config.json
