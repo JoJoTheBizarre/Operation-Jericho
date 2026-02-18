@@ -1,0 +1,14 @@
+[project]
+name = "operation-jericho"
+version = "0.1.0"
+description = "MCP server for playing classic text adventure games (Zork, Adventure, etc.) via Jericho"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "jericho>=3.3.1",
+    "mcp[cli]>=1.26.0",
+]
+
+[project.scripts]
+jericho-mcp-server = "jericho_mcp_server:main"
