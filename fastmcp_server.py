@@ -1,34 +1,20 @@
-#!/usr/bin/env python3
-"""
-Jericho FastMCP Server - A FastMCP HTTP server for playing text adventure games.
-Provides tools to interact with classic Z-machine games (Zork, Adventure, etc.)
-using the Jericho library via HTTP transport.
-"""
-
-import asyncio
-import json
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Optional, Dict, List
-from pathlib import Path
+from typing import Optional, Dict
 
-from fastmcp import FastMCP, Context
+from fastmcp import FastMCP
 from starlette.responses import JSONResponse
-
-# Import our jericho wrapper
+from starlette.requests import Request
 from src.zork_env import (
     TextAdventureEnv,
     GameState,
     list_available_games,
-    discover_games,
 )
 
 
-# Initialize the FastMCP server
 mcp = FastMCP("jericho-fastmcp-server")
 
 
-# Session management (same as before)
 class GameSession:
     """Represents an active game session."""
 
@@ -43,21 +29,17 @@ class GameSession:
         self.last_accessed = datetime.now()
 
     def is_expired(self, timeout_minutes: int = 60) -> bool:
-        """Check if session has been inactive for too long."""
         return datetime.now() - self.last_accessed > timedelta(minutes=timeout_minutes)
 
 
-# Global session storage
 _sessions: Dict[str, GameSession] = {}
 
 
 def _generate_session_id() -> str:
-    """Generate a unique session ID."""
     return str(uuid.uuid4())
 
 
 def _get_session(session_id: str) -> Optional[GameSession]:
-    """Get a session by ID, updating its access time."""
     session = _sessions.get(session_id)
     if session:
         session.update_access_time()
@@ -65,7 +47,6 @@ def _get_session(session_id: str) -> Optional[GameSession]:
 
 
 def _cleanup_expired_sessions(timeout_minutes: int = 60):
-    """Remove expired sessions."""
     expired_ids = [
         session_id
         for session_id, session in _sessions.items()
@@ -77,7 +58,6 @@ def _cleanup_expired_sessions(timeout_minutes: int = 60):
 
 
 def _format_game_state(state: GameState) -> dict:
-    """Format a GameState object for JSON serialization."""
     return {
         "observation": state.observation,
         "score": state.score,
@@ -87,14 +67,10 @@ def _format_game_state(state: GameState) -> dict:
         "reward": state.reward,
         "inventory": state.inventory,
         "location": state.location,
+        "state_hash": state.state_hash,
     }
 
 
-# Clean up expired sessions periodically (maybe on each request)
-# We'll add a simple cleanup before each tool call via middleware or just call in each tool
-
-
-# Define FastMCP tools
 @mcp.tool
 async def list_available_games_tool(limit: int = 0) -> dict:
     """List all available text adventure games.
@@ -103,122 +79,102 @@ async def list_available_games_tool(limit: int = 0) -> dict:
         limit: Maximum number of games to return (0 for all)
     """
     _cleanup_expired_sessions()
-    try:
-        games = list_available_games()
-        if limit > 0:
-            games = games[:limit]
 
-        result = {
-            "total_games": len(games),
-            "games": games,
-            "default_games_dir": str(
-                Path(__file__).parent
-                / "games"
-                / "z-machine-games"
-                / "jericho-game-suite"
-            ),
-        }
-        return result
-    except Exception as e:
-        return {"error": f"Failed to list games: {str(e)}"}
+    games = list_available_games()
+
+    if limit > 0:
+        games = games[:limit]
+
+    return {
+        "games": games,
+        "total": len(list_available_games()),
+        "showing": len(games),
+    }
 
 
 @mcp.tool
-async def create_game_session(game_name: str) -> dict:
-    """Start a new game session with a specific game.
+async def start_game(game_name: str) -> dict:
+    """Start a new game session.
 
     Args:
         game_name: Name of the game to start (e.g., 'zork1', 'advent')
     """
     _cleanup_expired_sessions()
-    if not game_name:
-        return {"error": "game_name is required"}
 
     try:
-        # Create game environment
         env = TextAdventureEnv(game_name)
         state = env.reset()
 
-        # Create session
         session_id = _generate_session_id()
         session = GameSession(env, game_name)
         session.current_state = state
         _sessions[session_id] = session
 
-        result = {
+        return {
             "session_id": session_id,
-            "game_name": game_name,
-            "initial_state": _format_game_state(state),
-            "message": f"Started game '{game_name}'. Use session_id for future interactions.",
+            "game": game_name,
+            "state": _format_game_state(state),
+            "message": f"Started new game: {game_name}",
         }
-        return result
     except Exception as e:
-        return {"error": f"Failed to create game session: {str(e)}"}
+        return {
+            "error": str(e),
+            "game": game_name,
+        }
 
 
 @mcp.tool
-async def game_step(session_id: str, action: str) -> dict:
-    """Take an action in the game (move, take item, use object, etc.).
+async def take_action(session_id: str, action: str) -> dict:
+    """Take an action in an active game session.
 
     Args:
-        session_id: Session ID returned by create_game_session
-        action: Action to perform (e.g., 'go north', 'take lamp', 'look')
+        session_id: The session ID from start_game
+        action: The command to execute (e.g., 'go north', 'take lamp')
     """
     _cleanup_expired_sessions()
-    if not session_id or not action:
-        return {"error": "session_id and action are required"}
 
     session = _get_session(session_id)
     if not session:
-        return {"error": f"Session not found: {session_id}"}
+        return {"error": "Invalid or expired session ID"}
 
     try:
-        # Take the action
         state = session.env.step(action)
         session.current_state = state
 
-        result = {
+        return {
             "session_id": session_id,
             "action": action,
-            "new_state": _format_game_state(state),
-            "action_result": state.observation,
+            "state": _format_game_state(state),
         }
-        return result
     except Exception as e:
-        return {"error": f"Failed to execute action '{action}': {str(e)}"}
+        return {
+            "error": str(e),
+            "session_id": session_id,
+            "action": action,
+        }
 
 
 @mcp.tool
 async def get_game_state(session_id: str) -> dict:
-    """Get the current state of a game session.
+    """Get the current state of an active game session.
 
     Args:
-        session_id: Session ID returned by create_game_session
+        session_id: The session ID from start_game
     """
     _cleanup_expired_sessions()
-    if not session_id:
-        return {"error": "session_id is required"}
 
     session = _get_session(session_id)
     if not session:
-        return {"error": f"Session not found: {session_id}"}
+        return {"error": "Invalid or expired session ID"}
 
-    # If we don't have a current state, get it
     if not session.current_state:
-        try:
-            # This is a fallback - normally we should always have current_state
-            session.current_state = session.env.reset()
-        except:
-            pass
+        return {"error": "No state available. Game may not have been started."}
 
-    result = {
+    return {
         "session_id": session_id,
-        "game_name": session.game_name,
-        "state": _format_game_state(session.current_state)
-        if session.current_state
-        else None,
+        "game": session.game_name,
+        "state": _format_game_state(session.current_state),
     }
-    return result
 
 
 @mcp.tool
@@ -226,187 +182,513 @@ async def get_valid_actions(session_id: str) -> dict:
     """Get a list of valid actions for the current game state.
 
     Args:
-        session_id: Session ID returned by create_game_session
+        session_id: The session ID from start_game
     """
     _cleanup_expired_sessions()
-    if not session_id:
-        return {"error": "session_id is required"}
 
     session = _get_session(session_id)
     if not session:
-        return {"error": f"Session not found: {session_id}"}
+        return {"error": "Invalid or expired session ID"}
 
     try:
-        valid_actions = session.env.get_valid_actions()
-
-        result = {
+        actions = session.env.get_valid_actions()
+        return {
             "session_id": session_id,
-            "valid_actions": valid_actions,
-            "count": len(valid_actions),
+            "valid_actions": actions,
+            "count": len(actions),
         }
-        return result
     except Exception as e:
-        return {"error": f"Failed to get valid actions: {str(e)}"}
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
 
 
 @mcp.tool
-async def reset_game(session_id: str) -> dict:
-    """Reset a game session to the beginning.
+async def get_game_history(session_id: str, last_n: int = 10) -> dict:
+    """Get the history of actions and observations.
 
     Args:
-        session_id: Session ID returned by create_game_session
+        session_id: The session ID from start_game
+        last_n: Number of recent actions to return (0 for all)
     """
     _cleanup_expired_sessions()
-    if not session_id:
-        return {"error": "session_id is required"}
 
     session = _get_session(session_id)
     if not session:
-        return {"error": f"Session not found: {session_id}"}
+        return {"error": "Invalid or expired session ID"}
 
-    try:
-        state = session.env.reset()
-        session.current_state = state
+    history = session.env.get_history()
+    if last_n > 0:
+        history = history[-last_n:]
 
-        result = {
-            "session_id": session_id,
-            "game_name": session.game_name,
-            "reset_state": _format_game_state(state),
-            "message": "Game reset to beginning",
-        }
-        return result
-    except Exception as e:
-        return {"error": f"Failed to reset game: {str(e)}"}
+    formatted_history = [
+        {"action": action, "observation": obs} for action, obs in history
+    ]
+
+    return {
+        "session_id": session_id,
+        "history": formatted_history,
+        "total_moves": len(session.env.get_history()),
+    }
 
 
 @mcp.tool
-async def close_game_session(session_id: str) -> dict:
-    """Close a game session and free resources.
+async def end_game(session_id: str) -> dict:
+    """End a game session and free resources.
 
     Args:
-        session_id: Session ID returned by create_game_session
+        session_id: The session ID to end
     """
     _cleanup_expired_sessions()
-    if not session_id:
-        return {"error": "session_id is required"}
 
-    if session_id in _sessions:
-        # Clean up resources if needed
-        session = _sessions[session_id]
-        if hasattr(session.env, "close"):
-            session.env.close()
-        del _sessions[session_id]
+    session = _sessions.pop(session_id, None)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
 
-        result = {
-            "session_id": session_id,
-            "closed": True,
-            "message": "Game session closed",
-        }
-    else:
-        result = {
-            "session_id": session_id,
-            "closed": False,
-            "message": "Session not found (may have already been closed)",
-        }
-    return result
+    session.env.close()
+
+    return {
+        "session_id": session_id,
+        "message": f"Game session ended: {session.game_name}",
+        "final_score": session.current_state.score if session.current_state else 0,
+    }
 
 
 @mcp.tool
 async def save_game_state(session_id: str) -> dict:
-    """Save the current game state for later restoration.
+    """Save the current game state (returns a state token).
 
     Args:
-        session_id: Session ID returned by create_game_session
+        session_id: The session ID from start_game
     """
     _cleanup_expired_sessions()
-    if not session_id:
-        return {"error": "session_id is required"}
 
     session = _get_session(session_id)
     if not session:
-        return {"error": f"Session not found: {session_id}"}
+        return {"error": "Invalid or expired session ID"}
 
     try:
-        saved_state = session.env.save_state()
-        # Convert to JSON-serializable format if needed
-        state_str = (
-            json.dumps(saved_state)
-            if isinstance(saved_state, (dict, list))
-            else str(saved_state)
-        )
+        state_data = session.env.save_state()
+        state_token = str(uuid.uuid4())
 
-        result = {
+        if not hasattr(session, "_saved_states"):
+            session._saved_states = {}
+        session._saved_states[state_token] = state_data
+
+        return {
             "session_id": session_id,
-            "state_data": state_str,
-            "message": "Game state saved",
+            "state_token": state_token,
+            "message": "Game state saved successfully",
         }
-        return result
     except Exception as e:
-        return {"error": f"Failed to save game state: {str(e)}"}
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
 
 
 @mcp.tool
-async def load_game_state(session_id: str, state_data: str) -> dict:
+async def load_game_state(session_id: str, state_token: str) -> dict:
     """Load a previously saved game state.
 
     Args:
-        session_id: Session ID returned by create_game_session
-        state_data: Saved state data from save_game_state
+        session_id: The session ID from start_game
+        state_token: The token from save_game_state
     """
     _cleanup_expired_sessions()
-    if not session_id or not state_data:
-        return {"error": "session_id and state_data are required"}
 
     session = _get_session(session_id)
     if not session:
-        return {"error": f"Session not found: {session_id}"}
+        return {"error": "Invalid or expired session ID"}
+
+    if (
+        not hasattr(session, "_saved_states")
+        or state_token not in session._saved_states
+    ):
+        return {"error": "Invalid state token"}
 
     try:
-        # Parse state data
-        try:
-            # Try to parse as JSON first
-            state = json.loads(state_data)
-        except json.JSONDecodeError:
-            # If not JSON, use as-is (might be a string representation)
-            state = state_data
+        state_data = session._saved_states[state_token]
+        session.env.load_state(state_data)
 
-        session.env.load_state(state)
-
-        # Get current state after loading
-        # Note: load_state doesn't return state, so we need to get it differently
-        # For now, we'll just acknowledge success
-        result = {
+        return {
             "session_id": session_id,
-            "loaded": True,
-            "message": "Game state loaded",
+            "state_token": state_token,
+            "message": "Game state loaded successfully",
         }
-        return result
     except Exception as e:
-        return {"error": f"Failed to load game state: {str(e)}"}
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
 
 
-# Add a health check endpoint
+@mcp.tool
+async def get_world_objects(session_id: str) -> dict:
+    """Get all objects in the game world with their relationships.
+
+    Args:
+        session_id: The session ID from start_game
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        objects = session.env.get_world_objects()
+        return {
+            "session_id": session_id,
+            "objects": objects,
+            "total_objects": len(objects),
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def get_objects_in_location(session_id: str, location_name: str = "") -> dict:
+    """Get all objects in a specific location or current location.
+
+    Args:
+        session_id: The session ID from start_game
+        location_name: Name of location (empty for current location)
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        location = location_name if location_name else None
+        objects = session.env.get_objects_in_location(location)
+        return {
+            "session_id": session_id,
+            "location": location_name or "current",
+            "objects": objects,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def get_object_details(session_id: str, object_name: str) -> dict:
+    """Get detailed information about a specific object.
+
+    Args:
+        session_id: The session ID from start_game
+        object_name: Name of the object to inspect
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        details = session.env.get_object_details(object_name)
+        if details:
+            return {
+                "session_id": session_id,
+                "object": details,
+            }
+        else:
+            return {
+                "session_id": session_id,
+                "error": f"Object not found: {object_name}",
+            }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def check_state_visited(session_id: str) -> dict:
+    """Check if the current game state has been visited before.
+
+    Args:
+        session_id: The session ID from start_game
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        current_hash = session.env.get_world_state_hash()
+        is_visited = session.env.is_state_visited(current_hash)
+        total_states = session.env.get_visited_states_count()
+
+        return {
+            "session_id": session_id,
+            "current_state_hash": current_hash,
+            "is_revisited": is_visited,
+            "total_unique_states": total_states,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def get_game_dictionary(session_id: str) -> dict:
+    """Get all words recognized by the game parser.
+
+    Args:
+        session_id: The session ID from start_game
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        dictionary = session.env.get_game_dictionary()
+        return {
+            "session_id": session_id,
+            "vocabulary": dictionary,
+            "word_count": len(dictionary),
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def get_game_info(session_id: str) -> dict:
+    """Get comprehensive game metadata and information.
+
+    Args:
+        session_id: The session ID from start_game
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        info = session.env.get_game_info()
+        return {
+            "session_id": session_id,
+            "game_info": info,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def get_action_templates(session_id: str) -> dict:
+    """Get action templates supported by the game.
+
+    Args:
+        session_id: The session ID from start_game
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        templates = session.env.get_action_templates()
+        return {
+            "session_id": session_id,
+            "templates": templates,
+            "template_count": len(templates),
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def generate_template_actions(
+    session_id: str, filter_type: list[str] = []
+) -> dict:
+    """Generate valid actions using templates and current game state.
+
+    Args:
+        session_id: The session ID from start_game
+        filter_type: List of keywords to filter actions (e.g., ["take", "open"])
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        filter_list = filter_type if filter_type else None
+        actions = session.env.generate_template_actions(filter_list)
+        return {
+            "session_id": session_id,
+            "actions": actions,
+            "action_count": len(actions),
+            "filter_applied": filter_list,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def get_valid_actions_advanced(
+    session_id: str,
+    use_templates: bool = False,
+    filter_type: list[str] = [],
+    max_actions: int = 0,
+) -> dict:
+    """Get valid actions with advanced filtering options.
+
+    Args:
+        session_id: The session ID from start_game
+        use_templates: Use template-based action generation
+        filter_type: List of keywords to filter actions
+        max_actions: Maximum number of actions to return (0 for all)
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        filter_list = filter_type if filter_type else None
+        actions = session.env.get_valid_actions_advanced(
+            use_templates=use_templates,
+            filter_type=filter_list,
+            max_actions=max_actions,
+        )
+        return {
+            "session_id": session_id,
+            "actions": actions,
+            "action_count": len(actions),
+            "template_based": use_templates,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def get_location_graph(session_id: str) -> dict:
+    """Get a graph of all discovered locations and their connections.
+
+    Args:
+        session_id: The session ID from start_game
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        graph = session.env.get_location_graph()
+        return {
+            "session_id": session_id,
+            "location_graph": graph,
+            "location_count": len(graph),
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
+@mcp.tool
+async def compare_to_walkthrough(session_id: str) -> dict:
+    """Compare current progress to the optimal walkthrough.
+
+    Args:
+        session_id: The session ID from start_game
+    """
+    _cleanup_expired_sessions()
+
+    session = _get_session(session_id)
+    if not session:
+        return {"error": "Invalid or expired session ID"}
+
+    try:
+        comparison = session.env.compare_to_walkthrough()
+        return {
+            "session_id": session_id,
+            "comparison": comparison,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "session_id": session_id,
+        }
+
+
 @mcp.custom_route("/health", methods=["GET"])
-async def health_check(request):
-    """Health check endpoint for monitoring."""
-    return JSONResponse({"status": "healthy", "service": "jericho-mcp-server"})
+async def health_check(request: Request) -> JSONResponse:
+    """Health check endpoint for Docker."""
+    return JSONResponse({"status": "healthy", "service": "jericho-fastmcp-server"})
 
 
-# Create ASGI application for HTTP deployment
-app = mcp.http_app()
+@mcp.custom_route("/sessions", methods=["GET"])
+async def list_sessions(request: Request) -> JSONResponse:
+    """List all active sessions."""
+    _cleanup_expired_sessions()
+
+    sessions = {
+        session_id: {
+            "game": session.game_name,
+            "created_at": session.created_at.isoformat(),
+            "last_accessed": session.last_accessed.isoformat(),
+            "score": session.current_state.score if session.current_state else 0,
+        }
+        for session_id, session in _sessions.items()
+    }
+
+    return JSONResponse(
+        {
+            "active_sessions": len(sessions),
+            "sessions": sessions,
+        }
+    )
 
 
 def main():
-    """Run the HTTP server using uvicorn."""
-    import uvicorn
+    """Run the FastMCP HTTP server."""
     import os
 
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", "8000"))
-    print(f"Starting Jericho FastMCP HTTP server on {host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+
+    print(f"Starting Jericho FastMCP Server on {host}:{port}")
+    mcp.run(transport="sse", host=host, port=port)
 
 
-# For direct HTTP server (alternative): use mcp.run(transport="http", host="0.0.0.0", port=8000)
 if __name__ == "__main__":
     main()

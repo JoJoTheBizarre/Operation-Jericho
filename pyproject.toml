@@ -1,21 +1,21 @@
 [project]
-name = "operation-jericho"
+name = "jericho-fastmcp-server"
 version = "0.1.0"
-description = "MCP server for playing classic text adventure games (Zork, Adventure, etc.) via Jericho"
-readme = "README.md"
+description = "FastMCP HTTP server for interactive text adventure games"
 requires-python = ">=3.12"
 dependencies = [
-    "httpx>=0.28.1",
+    "fastmcp>=0.2.0",
     "jericho>=3.3.1",
-    "mcp[cli]>=1.26.0",
-    "fastmcp>=2.14.0",
-    "uvicorn[standard]>=0.34.0",
+    "uvicorn>=0.31.0",
 ]
 
 [project.scripts]
-jericho-mcp-server = "jericho_mcp_server:main"
 jericho-http-server = "fastmcp_server:main"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
 [build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+

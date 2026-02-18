@@ -1,5 +1,4 @@
 # Documentation and external files
-skill.md
 games/
 
 # Python
@@ -7,6 +6,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.ruff_cache
 .Python
 .venv/
 venv/
