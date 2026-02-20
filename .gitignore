@@ -4,6 +4,7 @@ games/
 # Python
 __pycache__/
 *.pyc
+__pycache__
 *.pyo
 *.pyd
 .ruff_cache
@@ -77,6 +78,3 @@ docker-build*.log
 # Local test files
 test_container.py
 test_fastmcp.py
-
-# Claude Code configuration
-.claude/

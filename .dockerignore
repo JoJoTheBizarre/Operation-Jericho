@@ -1,5 +1,3 @@
-# Docker ignore file for Jericho MCP Server
-
 # Version control
 .git
 .gitignore
@@ -32,7 +30,6 @@ Thumbs.db
 README.md
 skill.md
 example_usage.py
-claude_desktop_config.json
 
 # Test files
 test_*.py
