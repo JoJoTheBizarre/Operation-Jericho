@@ -31,7 +31,7 @@ chmod +x download_games.sh
 
 3. Run the HTTP server:
 ```bash
-uv run jericho-http-server
+uv run main.py
 ```
 
 ### Docker

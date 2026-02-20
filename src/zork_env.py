@@ -1,10 +1,13 @@
 import os
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
 from jericho import FrotzEnv
 from jericho.template_action_generator import TemplateActionGenerator
+
+logger = logging.getLogger(__name__)
 
 
 class GameError(Exception):
@@ -89,9 +92,33 @@ def list_available_games(games_dir: Optional[Path] = None) -> list[str]:
 
 
 class TextAdventureEnv:
-    """Wrapper around Jericho's FrotzEnv for text adventure games."""
+    """
+    Wrapper around Jericho's FrotzEnv for text adventure games.
+
+    This class provides a clean API that properly uses the official Jericho
+    FrotzEnv methods according to the documentation at:
+    https://jericho-py.readthedocs.io/
+
+    Key Jericho API Methods Used:
+    - reset() -> str (returns observation only in most versions)
+    - step(action) -> (observation, score, done, info)
+    - get_valid_actions() -> List[str]
+    - get_inventory() -> List[ZObject]
+    - get_player_location() -> ZObject
+    - get_world_objects() -> List[ZObject]
+    - get_dictionary() -> List[DictionaryWord]
+    - get_walkthrough() -> List[str]
+    - get_state() / set_state(state) for save/load
+    """
 
     def __init__(self, game: str = "zork1", games_dir: Optional[str] = None):
+        """
+        Initialize the text adventure environment.
+
+        Args:
+            game: Either a game name (e.g., 'zork1') or path to .z3/.z4/.z5/.z8 file
+            games_dir: Optional directory containing game files
+        """
         if os.path.isfile(game):
             game_path = Path(game)
             self.game = game_path.stem
@@ -126,6 +153,18 @@ class TextAdventureEnv:
         self._state_hashes: set[str] = set()
         self._template_generator: Optional[TemplateActionGenerator] = None
 
+        # Detect Jericho version for compatibility
+        try:
+            import jericho
+
+            self._jericho_version = getattr(jericho, "__version__", "unknown")
+        except Exception:
+            self._jericho_version = "unknown"
+
+        logger.info(
+            f"Loaded game: {self.game} (Jericho version: {self._jericho_version})"
+        )
+
     def __enter__(self):
         return self
 
@@ -140,62 +179,108 @@ class TextAdventureEnv:
         return f"TextAdventureEnv(game='{self.game}', path={self.game_path})"
 
     def reset(self) -> GameState:
-        """Reset the game to the beginning."""
+        """
+        Reset the game to the beginning.
+
+        According to Jericho docs, reset() returns just the observation string.
+        Some versions may return (observation, info) tuple.
+        """
         try:
-            observation, info = self.env.reset()
+            result = self.env.reset()
+
+            # Handle both API formats for compatibility
+            if isinstance(result, tuple):
+                observation, info = result
+            else:
+                # Standard Jericho API: reset() returns just observation string
+                observation = result
+                info = {}
+
         except Exception as e:
             raise GameLoadError(f"Failed to reset game: {e}") from e
 
         self._last_score = 0
         self._history = []
         self._state_hashes = set()
-        return self._make_game_state(observation, info, done=False, reward=0)
+
+        try:
+            initial_score = self.env.get_score()
+        except Exception:
+            initial_score = 0
+
+        return self._make_game_state(
+            observation=observation, score=initial_score, moves=0, done=False, reward=0
+        )
 
     def step(self, action: str) -> GameState:
-        """Take an action in the game."""
+        """
+        Take an action in the game.
+
+        According to Jericho docs, step() returns:
+        (observation, score, done, info)
+
+        Where:
+        - observation: str - The game's narrative response
+        - score: int - Current game score
+        - done: bool - Whether the game has ended
+        - info: dict - Additional information
+        """
         if not action or not isinstance(action, str):
             raise InvalidActionError(
                 f"Action must be a non-empty string, got: {action!r}"
             )
 
         try:
-            observation, reward, done, info = self.env.step(action)
+            observation, score, done, info = self.env.step(action)
         except Exception as e:
             raise InvalidActionError(f"Invalid action '{action}': {e}") from e
 
-        current_score = info.get("score", 0)
-        reward = current_score - self._last_score
-        self._last_score = current_score
+        reward = score - self._last_score
+        self._last_score = score
 
         self._history.append((action, observation))
 
-        return self._make_game_state(observation, info, done, reward)
+        moves = info.get("moves", len(self._history))
+
+        return self._make_game_state(
+            observation=observation, score=score, moves=moves, done=done, reward=reward
+        )
 
     def _make_game_state(
-        self, observation: str, info: dict, done: bool, reward: int
+        self, observation: str, score: int, moves: int, done: bool, reward: int
     ) -> GameState:
         """Create a GameState from the environment info."""
+
         try:
             inventory = [str(obj) for obj in self.env.get_inventory()]
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not get inventory: {e}")
             inventory = []
 
         try:
             location = str(self.env.get_player_location())
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not get location: {e}")
             location = "Unknown"
 
         try:
             state_hash = self.env.get_world_state_hash()
             self._state_hashes.add(state_hash)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not get state hash: {e}")
             state_hash = None
+
+        try:
+            max_score = self.env.get_max_score()
+        except Exception as e:
+            logger.debug(f"Could not get max score: {e}")
+            max_score = 0
 
         return GameState(
             observation=observation,
-            score=info.get("score", 0),
-            max_score=self.env.get_max_score(),
-            moves=info.get("moves", 0),
+            score=score,
+            max_score=max_score,
+            moves=moves,
             done=done,
             reward=reward,
             inventory=inventory,
@@ -208,51 +293,68 @@ class TextAdventureEnv:
         return self._history.copy()
 
     def get_valid_actions(self) -> list[str]:
-        """Get a list of valid actions for the current state."""
+        """
+        Get a list of valid actions for the current state.
+
+        Uses Jericho's get_valid_actions() which analyzes the current
+        game state and returns likely valid commands.
+        """
         try:
             return self.env.get_valid_actions()
-        except Exception:
-            return [
-                "north",
-                "south",
-                "east",
-                "west",
-                "up",
-                "down",
-                "look",
-                "inventory",
-                "take all",
-                "open mailbox",
-                "read",
-            ]
+        except Exception as e:
+            logger.warning(
+                f"Could not get valid actions: {e}. Returning minimal fallback."
+            )
+            # Return minimal safe actions as fallback
+            return ["look", "inventory", "wait"]
 
     def save_state(self) -> Any:
-        """Save the current game state."""
+        """
+        Save the current game state.
+
+        Returns an opaque state object that can be restored with load_state().
+        """
         try:
             return self.env.get_state()
         except Exception as e:
             raise StateError(f"Failed to save game state: {e}") from e
 
     def load_state(self, state: Any) -> None:
-        """Load a previously saved game state."""
+        """
+        Load a previously saved game state.
+
+        Args:
+            state: State object returned by save_state()
+        """
         try:
             self.env.set_state(state)
         except Exception as e:
             raise StateError(f"Failed to load game state: {e}") from e
 
     def get_walkthrough(self) -> list[str]:
-        """Get the walkthrough for the game."""
+        """
+        Get the walkthrough for the game.
+
+        Note: Walkthroughs are only available for supported games.
+        To replay a walkthrough properly, reset with use_walkthrough_seed=True.
+        """
         try:
             return self.env.get_walkthrough()
         except Exception as e:
-            raise GameError(f"Failed to get walkthrough: {e}") from e
+            raise GameError(f"Walkthrough not available: {e}") from e
 
     def get_world_objects(self) -> list[dict]:
-        """Get all objects in the game world with their relationships."""
+        """
+        Get all objects in the game world with their relationships.
+
+        Note: Object tree support varies by game. Some games may return
+        empty or incomplete object information.
+        """
         try:
             objects = self.env.get_world_objects()
             return [self._zobject_to_dict(obj) for obj in objects]
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Object tree not available: {e}")
             return []
 
     def _zobject_to_dict(self, obj) -> dict:
@@ -293,7 +395,12 @@ class TextAdventureEnv:
     def get_objects_in_location(
         self, location_name: Optional[str] = None
     ) -> list[dict]:
-        """Get all objects in a specific location or current location."""
+        """
+        Get all objects in a specific location or current location.
+
+        Args:
+            location_name: Name of location, or None for current location
+        """
         try:
             if location_name is None:
                 location = self.env.get_player_location()
@@ -312,20 +419,22 @@ class TextAdventureEnv:
 
             objects = []
             if hasattr(location, "child"):
-                child = location.child
+                child = location.child #type: ignore
                 while child:
                     objects.append(self._zobject_to_dict(child))
                     child = child.sibling if hasattr(child, "sibling") else None
 
             return objects
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Could not get objects in location: {e}")
             return []
 
     def get_world_state_hash(self) -> Optional[str]:
         """Get MD5 hash of current world state."""
         try:
             return self.env.get_world_state_hash()
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not get world state hash: {e}")
             return None
 
     def is_state_visited(self, state_hash: Optional[str] = None) -> bool:
@@ -339,10 +448,16 @@ class TextAdventureEnv:
         return len(self._state_hashes)
 
     def get_game_dictionary(self) -> list[str]:
-        """Get all words recognized by the game parser."""
+        """
+        Get all words recognized by the game parser.
+
+        Returns list of vocabulary words. Note that most games
+        recognize only the first 6 or 9 characters of each word.
+        """
         try:
-            return list(self.env.get_dictionary())
-        except Exception:
+            return [str(word) for word in self.env.get_dictionary()]
+        except Exception as e:
+            logger.warning(f"Could not get game dictionary: {e}")
             return []
 
     def get_game_info(self) -> dict:
@@ -350,21 +465,13 @@ class TextAdventureEnv:
         info = {
             "game_name": self.game,
             "game_path": str(self.game_path),
-            "max_score": self.env.get_max_score(),
+            "jericho_version": self._jericho_version,
         }
 
         try:
-            if hasattr(self.env, "bindings"):
-                bindings = self.env.bindings
-                info.update(
-                    {
-                        "rom_path": getattr(bindings, "rom_path", None),
-                        "seed": getattr(bindings, "seed", None),
-                        "max_word_length": getattr(bindings, "max_word_length", None),
-                    }
-                )
+            info["max_score"] = self.env.get_max_score()
         except Exception:
-            pass
+            info["max_score"] = 0
 
         try:
             walkthrough = self.get_walkthrough()
@@ -376,78 +483,13 @@ class TextAdventureEnv:
 
         return info
 
-    def get_action_templates(self) -> list[str]:
-        """Get action templates supported by the game."""
-        if self._template_generator is None:
-            try:
-                self._template_generator = TemplateActionGenerator(self.env)
-            except Exception:
-                return []
-
-        try:
-            return self._template_generator.templates
-        except Exception:
-            return []
-
-    def generate_template_actions(
-        self, filter_by_type: Optional[list[str]] = None
-    ) -> list[str]:
-        """Generate valid actions using templates and current game state."""
-        if self._template_generator is None:
-            try:
-                self._template_generator = TemplateActionGenerator(self.env)
-            except Exception:
-                return []
-
-        try:
-            actions = self._template_generator.generate_actions(self.env)
-
-            if filter_by_type:
-                filtered = []
-                for action in actions:
-                    action_lower = action.lower()
-                    if any(t in action_lower for t in filter_by_type):
-                        filtered.append(action)
-                return filtered
-
-            return actions
-        except Exception:
-            return []
-
-    def get_valid_actions_advanced(
-        self,
-        use_templates: bool = False,
-        filter_type: Optional[list[str]] = None,
-        max_actions: int = 0,
-    ) -> list[str]:
-        """Get valid actions with advanced filtering options."""
-        if use_templates:
-            actions = self.generate_template_actions(filter_type)
-        else:
-            try:
-                actions = self.env.get_valid_actions()
-            except Exception:
-                actions = [
-                    "north",
-                    "south",
-                    "east",
-                    "west",
-                    "up",
-                    "down",
-                    "look",
-                    "inventory",
-                    "take all",
-                    "open mailbox",
-                    "read",
-                ]
-
-        if max_actions > 0:
-            actions = actions[:max_actions]
-
-        return actions
-
     def get_location_graph(self) -> dict:
-        """Get a graph of all discovered locations and their connections."""
+        """
+        Get a graph of all discovered locations and their connections.
+
+        Note: This is a best-effort implementation. Not all games
+        provide complete location information.
+        """
         graph = {}
 
         try:
@@ -459,16 +501,16 @@ class TextAdventureEnv:
                 graph[loc_name] = {
                     "num": loc.num,
                     "objects": [str(child) for child in self._get_children(loc)],
-                    "exits": self._get_exits_from_location(loc),
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Could not build location graph: {e}")
 
         return graph
 
     def _is_location(self, obj) -> bool:
         """Check if an object is a location/room."""
         try:
+            # Locations typically have children but no parent (or parent is 0)
             return hasattr(obj, "child") and obj.parent in [None, 0]
         except Exception:
             return False
@@ -485,27 +527,6 @@ class TextAdventureEnv:
             pass
         return children
 
-    def _get_exits_from_location(self, location) -> list[str]:
-        """Extract possible exits from a location."""
-        exits = []
-        directions = [
-            "north",
-            "south",
-            "east",
-            "west",
-            "up",
-            "down",
-            "northeast",
-            "northwest",
-            "southeast",
-            "southwest",
-        ]
-
-        for direction in directions:
-            exits.append(direction)
-
-        return exits
-
     def get_object_details(self, object_name: str) -> Optional[dict]:
         """Get detailed information about a specific object."""
         try:
@@ -516,29 +537,9 @@ class TextAdventureEnv:
 
             if obj:
                 return self._zobject_to_dict(obj)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Could not get object details: {e}")
         return None
-
-    def compare_to_walkthrough(self) -> dict:
-        """Compare current progress to walkthrough."""
-        try:
-            walkthrough = self.get_walkthrough()
-            current_moves = len(self._history)
-
-            return {
-                "current_moves": current_moves,
-                "walkthrough_moves": len(walkthrough),
-                "efficiency": round(len(walkthrough) / current_moves * 100, 2)
-                if current_moves > 0
-                else 0,
-                "on_track": current_moves <= len(walkthrough) * 1.5,
-            }
-        except Exception:
-            return {
-                "current_moves": len(self._history),
-                "error": "Walkthrough not available",
-            }
 
 
 ZorkEnvironment = TextAdventureEnv
