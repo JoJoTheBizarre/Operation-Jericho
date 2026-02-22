@@ -7,12 +7,7 @@
 ## Features
 
 - 🎮 Play 50+ classic text adventure games
-- 💾 Session management with save/load states
-- 🌍 World object tree inspection — see all objects and their relationships
-- 🔍 State hash tracking — detect revisited states and avoid loops
-- 📖 Game dictionary — access the complete parser vocabulary
-- 🎯 Template action generator — smart, grammar-aware action generation
-- 🗺️ Location graph — map the game world structure
+- 💾 Single Game Session (Can only handle one Player at a time)
 - 📚 Built-in guides as MCP Resources — agent-readable how-to-play and command reference
 
 ---
