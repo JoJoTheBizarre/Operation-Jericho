@@ -2,7 +2,7 @@ from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 from starlette.requests import Request
 
-from .zork_env import list_available_games
+from .game_env import list_available_games
 from .session import SingleGameSession, _format_state
 from .resources import HOW_TO_PLAY, GUIDE_COMMANDS
 
