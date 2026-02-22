@@ -2,11 +2,10 @@ import os
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from jericho import FrotzEnv, DictionaryWord
-from jericho.template_action_generator import TemplateActionGenerator
-from .exceptions import GameError, GameNotFoundError, GameLoadError, InvalidActionError, StateError
+from .exceptions import GameNotFoundError, GameLoadError, InvalidActionError
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +109,6 @@ class TextAdventureEnv:
         self._last_score = 0
         self._history: list[tuple[str, str]] = []
         self._state_hashes: set[str] = set()
-        self._template_generator: Optional[TemplateActionGenerator] = None
 
         try:
             import jericho
@@ -120,15 +118,6 @@ class TextAdventureEnv:
 
         logger.info(f"Loaded game: {self.game} (Jericho version: {self._jericho_version})")
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
-    def close(self):
-        pass
-
     def __repr__(self) -> str:
         return f"TextAdventureEnv(game='{self.game}', path={self.game_path})"
 
@@ -136,11 +125,7 @@ class TextAdventureEnv:
         """Reset the game to the beginning."""
         try:
             result = self.env.reset()
-            if isinstance(result, tuple):
-                observation, info = result
-            else:
-                observation = result
-                info = {}
+            observation, _ = result
         except Exception as e:
             raise GameLoadError(f"Failed to reset game: {e}") from e
 
@@ -168,11 +153,12 @@ class TextAdventureEnv:
             raise InvalidActionError(f"Action must be a non-empty string, got: {action!r}")
 
         try:
-            observation, score, done, info = self.env.step(action)
+            observation, reward, done, info = self.env.step(action)
+            # info is {'moves':self.get_moves(), 'score':score} which is the integer number of moves taken by the player in the current episode and score
         except Exception as e:
             raise InvalidActionError(f"Invalid action '{action}': {e}") from e
 
-        reward = score - self._last_score
+        score = self._last_score + reward
         self._last_score = score
         self._history.append((action, observation))
         moves = info.get("moves", len(self._history))
@@ -235,36 +221,6 @@ class TextAdventureEnv:
         except Exception as e:
             logger.warning(f"Could not get valid actions: {e}. Returning minimal fallback.")
             return ["look", "inventory", "wait"]
-
-    def save_state(self) -> Any:
-        """Save current game state. Returns an opaque tuple for later restoration."""
-        try:
-            return self.env.get_state()
-        except Exception as e:
-            raise StateError(f"Failed to save game state: {e}") from e
-
-    def load_state(self, state: Any) -> None:
-        """Restore a previously saved game state."""
-        try:
-            self.env.set_state(state)
-        except Exception as e:
-            raise StateError(f"Failed to load game state: {e}") from e
-
-    def get_walkthrough(self) -> list[str]:
-        """Get the walkthrough action sequence. Only available for supported games."""
-        try:
-            return self.env.get_walkthrough()
-        except Exception as e:
-            raise GameError(f"Walkthrough not available: {e}") from e
-
-    def get_world_objects(self) -> list[dict]:
-        """Return all game-world objects as dictionaries."""
-        try:
-            objects = self.env.get_world_objects()
-            return [self._zobject_to_dict(obj) for obj in objects]
-        except Exception as e:
-            logger.warning(f"Object tree not available: {e}")
-            return []
 
     def _zobject_to_dict(self, obj) -> dict:
         """Convert a ZObject to a serialisable dictionary."""
@@ -346,85 +302,6 @@ class TextAdventureEnv:
             logger.warning(f"Could not get game dictionary: {e}")
             return []
 
-    def get_game_info(self) -> dict:
-        """Return comprehensive metadata about the loaded game."""
-        info = {
-            "game_name": self.game,
-            "game_path": str(self.game_path),
-            "jericho_version": self._jericho_version,
-        }
-        try:
-            info["max_score"] = self.env.get_max_score()
-        except Exception:
-            info["max_score"] = 0
-
-        try:
-            walkthrough = self.get_walkthrough()
-            info["walkthrough_length"] = len(walkthrough)
-            info["has_walkthrough"] = True
-        except Exception:
-            info["walkthrough_length"] = 0
-            info["has_walkthrough"] = False
-
-        return info
-
-    def get_location_graph(self) -> dict:
-        """
-        Build a structural map of the game world from the object tree.
-
-        Locations are identified as objects whose parent is 0 (top-level)
-        or that have the structure of a room (no meaningful parent).
-        Returns a dict of location_name → {num, objects[]}.
-        """
-        graph = {}
-        try:
-            all_objects = self.env.get_world_objects()
-            for obj in all_objects:
-                if self._is_location(obj):
-                    loc_name = str(obj)
-                    children = self._get_children_from_raw(obj, all_objects)
-                    graph[loc_name] = {
-                        "num": obj.num,
-                        "objects": [str(c) for c in children],
-                    }
-        except Exception as e:
-            logger.warning(f"Could not build location graph: {e}")
-        return graph
-
-    def _is_location(self, obj) -> bool:
-        """Heuristic: objects with no meaningful parent are likely room objects."""
-        try:
-            return hasattr(obj, "child") and obj.parent in (None, 0)
-        except Exception:
-            return False
-
-    def _get_children_from_raw(self, obj, all_objects) -> list:
-        """Walk child/sibling relationships to return direct children."""
-        children = []
-        try:
-            obj_map = {o.num: o for o in all_objects if hasattr(o, "num")}
-            child_num = getattr(obj, "child", None)
-            while child_num:
-                child = obj_map.get(child_num)
-                if child is None:
-                    break
-                children.append(child)
-                child_num = getattr(child, "sibling", None)
-        except Exception:
-            pass
-        return children
-
-    def get_object_details(self, object_name: str) -> Optional[dict]:
-        """Get detailed information about a specific object by name."""
-        try:
-            all_objects = self.env.get_world_objects()
-            obj = next(
-                (o for o in all_objects if str(o).lower() == object_name.lower()), None
-            )
-            return self._zobject_to_dict(obj) if obj else None
-        except Exception as e:
-            logger.warning(f"Could not get object details: {e}")
-            return None
 
 
 ZorkEnvironment = TextAdventureEnv

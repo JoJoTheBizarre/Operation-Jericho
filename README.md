@@ -78,7 +78,6 @@ Claude Code can then call all tools directly — start games, inspect world stat
 | `available_actions(limit)` | Get valid commands for the current state |
 | `look_around()` | Inspect nearby objects via the object tree |
 | `recent_history(count)` | Review past actions and results |
-| `explore_map()` | Get the full location graph |
 | `game_vocabulary()` | Get parser-recognised words by part of speech |
 | `list_games(limit)` | Browse available games |
 | `end_game()` | End the session and get a final summary |
