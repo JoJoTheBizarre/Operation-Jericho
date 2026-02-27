@@ -1,4 +1,4 @@
-from .zork_env import TextAdventureEnv, GameState
+from .game_env import TextAdventureEnv, GameState
 from typing import Optional
 from datetime import datetime
 
